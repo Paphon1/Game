@@ -14,6 +14,10 @@ public class GameCore extends JFrame {
     private JLabel scoreLabel;
     private int score = 0;
 
+    // Counters สำหรับ spawn / shoot
+    private int enemySpawnTimer = 0;
+    private int enemyShootTimer = 0;
+
     public GameCore() {
         setTitle("Bullet Hell Game");
         setSize(800, 600);
@@ -29,7 +33,7 @@ public class GameCore extends JFrame {
         scoreLabel.setFont(new Font("Arial", Font.BOLD, 18));
         add(scoreLabel);
 
-        // ควบคุมปุ่ม
+        // Keyboard control
         addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
@@ -48,142 +52,140 @@ public class GameCore extends JFrame {
         setFocusable(true);
         setVisible(true);
 
-        startGameThreads();
+        startGameLoop();
     }
 
-    private void startGameThreads() {
-        // Thread อัพเดทเกม ~60 FPS
+    private void startGameLoop() {
+        final int FPS = 60;
+        final int FRAME_TIME = 1000 / FPS; // ms per frame
+
         new Thread(() -> {
             while (true) {
+                long start = System.currentTimeMillis();
+
                 updateGame();
-                try {
-                    Thread.sleep(16);
-                } catch (InterruptedException ignored) {
-                }
-            }
-        }).start();
 
-        // Thread spawn enemy ทุก 2 วิ
-        new Thread(() -> {
-            while (true) {
-                spawnEnemies();
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException ignored) {
-                }
-            }
-        }).start();
-
-        // Thread ให้ enemy ยิงกระสุน
-        new Thread(() -> {
-            while (true) {
-                synchronized (enemies) {
-                    for (Enemy e : enemies) {
-                        if (!e.isDead() && random.nextBoolean()) {
-                            Bullet b = e.shootRandom();
-                            synchronized (bullets) {
-                                bullets.add(b);
-                            }
-                            SwingUtilities.invokeLater(() -> add(b.getLabel()));
-                        }
+                long timeTaken = System.currentTimeMillis() - start;
+                long sleepTime = FRAME_TIME - timeTaken;
+                if (sleepTime > 0) {
+                    try {
+                        Thread.sleep(sleepTime);
+                    } catch (InterruptedException ignored) {
                     }
                 }
-                try {
-                    Thread.sleep(1500);
-                } catch (InterruptedException ignored) {
-                }
             }
         }).start();
+    }
+
+    private void updateGame() {
+        int width = getWidth();
+        int height = getHeight();
+
+        // Update player
+        player.update(width, height);
+
+        // Update bullets
+        List<Bullet> bulletsToRemove = new ArrayList<>();
+        for (Bullet b : bullets) {
+            b.update();
+            if (b.isOutOfBounds(width, height)) {
+                bulletsToRemove.add(b);
+            }
+        }
+
+        // Update enemies timers
+        enemySpawnTimer++;
+        enemyShootTimer++;
+
+        // Spawn enemy ทุก 2 วิ
+        if (enemySpawnTimer >= 120) { // 60 FPS * 2 sec
+            spawnEnemies();
+            enemySpawnTimer = 0;
+        }
+
+        // Enemy shoot ทุก 1.5 วิ
+        if (enemyShootTimer >= 90) { // 60 FPS * 1.5 sec
+            enemyShoot();
+            enemyShootTimer = 0;
+        }
+
+        // Collision
+        checkCollisions();
+
+        // Remove bullets
+        for (Bullet b : bulletsToRemove) {
+            remove(b.getLabel());
+            bullets.remove(b);
+        }
+
+        // Repaint once per frame
+        repaint();
     }
 
     private void spawnEnemies() {
-        int count = 2 + random.nextInt(3); // 2–4 ตัว
+        int count = 2 + random.nextInt(3);
         for (int i = 0; i < count; i++) {
             int x = 400 + random.nextInt(350);
             int y = 50 + random.nextInt(450);
             int hp = 1 + random.nextInt(3);
             Enemy e = new Enemy(x, y, hp);
-            synchronized (enemies) {
-                enemies.add(e);
+            enemies.add(e);
+            add(e.getLabel());
+        }
+    }
+
+    private void enemyShoot() {
+        for (Enemy e : enemies) {
+            if (!e.isDead() && random.nextBoolean()) {
+                Bullet b = e.shootRandom();
+                bullets.add(b);
+                add(b.getLabel());
             }
-            SwingUtilities.invokeLater(() -> add(e.getLabel()));
         }
     }
 
     private void shootPlayer() {
         Bullet b = player.shoot();
-        synchronized (bullets) {
-            bullets.add(b);
-        }
-        SwingUtilities.invokeLater(() -> add(b.getLabel()));
-    }
-
-    private void updateGame() {
-        SwingUtilities.invokeLater(() -> player.update(getWidth(), getHeight()));
-
-        List<Bullet> toRemove = new ArrayList<>();
-        synchronized (bullets) {
-            for (Bullet b : bullets) {
-                SwingUtilities.invokeLater(b::update);
-                if (b.isOutOfBounds(getWidth(), getHeight())) {
-                    toRemove.add(b);
-                    SwingUtilities.invokeLater(() -> remove(b.getLabel()));
-                }
-            }
-            bullets.removeAll(toRemove);
-        }
-
-        checkCollisions();
+        bullets.add(b);
+        add(b.getLabel());
     }
 
     private void checkCollisions() {
         Rectangle playerBounds = player.getBounds();
-        List<Bullet> bulletsToRemove = new ArrayList<>();
         List<Enemy> enemiesToRemove = new ArrayList<>();
+        List<Bullet> bulletsToRemove = new ArrayList<>();
 
-        synchronized (bullets) {
-            synchronized (enemies) {
-                for (Bullet b : new ArrayList<>(bullets)) {
-                    Rectangle bulletBounds = b.getBounds();
-                    if (b.isPlayerBullet()) {
-                        for (Enemy e : new ArrayList<>(enemies)) {
-                            if (!e.isDead() && bulletBounds.intersects(e.getBounds())) {
-                                e.takeDamage(1);
-                                bulletsToRemove.add(b);
-                                if (e.isDead()) {
-                                    enemiesToRemove.add(e);
-                                    score++;
-                                    SwingUtilities.invokeLater(() -> {
-                                        remove(e.getLabel());
-                                        updateScore();
-                                    });
-                                }
-                                SwingUtilities.invokeLater(() -> remove(b.getLabel()));
-                                break;
-                            }
+        for (Bullet b : new ArrayList<>(bullets)) {
+            Rectangle bulletBounds = b.getBounds();
+            if (b.isPlayerBullet()) {
+                for (Enemy e : enemies) {
+                    if (!e.isDead() && bulletBounds.intersects(e.getBounds())) {
+                        e.takeDamage(1);
+                        bulletsToRemove.add(b);
+                        if (e.isDead()) {
+                            enemiesToRemove.add(e);
+                            score++;
+                            remove(e.getLabel());
                         }
-                    } else {
-                        if (bulletBounds.intersects(playerBounds)) {
-                            gameOver();
-                            return;
-                        }
+                        remove(b.getLabel());
+                        break;
                     }
                 }
-                enemies.removeAll(enemiesToRemove);
-                bullets.removeAll(bulletsToRemove);
+            } else {
+                if (bulletBounds.intersects(playerBounds)) {
+                    gameOver();
+                }
             }
         }
-    }
 
-    private void updateScore() {
+        enemies.removeAll(enemiesToRemove);
+        bullets.removeAll(bulletsToRemove);
         scoreLabel.setText("Score: " + score);
     }
 
     private void gameOver() {
-        SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(this, "Game Over! Final Score: " + score);
-            System.exit(0);
-        });
+        JOptionPane.showMessageDialog(this, "Game Over! Final Score: " + score);
+        System.exit(0);
     }
 
     public static void main(String[] args) {
