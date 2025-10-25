@@ -2,7 +2,7 @@ import java.io.*;
 import java.net.*;
 import java.util.function.Consumer;
 
-public class GameClient {
+class GameClient {
     private ObjectOutputStream out;
     private ObjectInputStream in;
     private String playerId;
@@ -42,6 +42,30 @@ public class GameClient {
     public void sendShoot(int x, int y) {
         try {
             out.writeObject(new NetworkPacket("SHOOT", playerId, x, y));
+            out.flush();
+        } catch (IOException ignored) {}
+    }
+
+    public void sendEnemySpawn(String enemyId, int x, int y, int hp) {
+        try {
+            NetworkPacket packet = new NetworkPacket("ENEMY_SPAWN", enemyId, x, y, hp);
+            out.writeObject(packet);
+            out.flush();
+        } catch (IOException ignored) {}
+    }
+
+    public void sendEnemyHit(String enemyId, int hp) {
+        try {
+            NetworkPacket packet = new NetworkPacket("ENEMY_HIT", enemyId, 0, 0, hp);
+            out.writeObject(packet);
+            out.flush();
+        } catch (IOException ignored) {}
+    }
+
+    public void sendEnemyDead(String enemyId) {
+        try {
+            NetworkPacket packet = new NetworkPacket("ENEMY_DEAD", enemyId, 0, 0, 0);
+            out.writeObject(packet);
             out.flush();
         } catch (IOException ignored) {}
     }

@@ -1,22 +1,20 @@
-
 import java.awt.*;
 import javax.swing.*;
 
-public class Bullet {
-
+class Bullet {
     private JLabel label;
     private int dx, dy;
-    private boolean isPlayerBullet;
+    private String ownerId; // playerId ของคนยิง หรือ "enemy"
 
-    public Bullet(int x, int y, int dx, int dy, boolean isPlayerBullet) {
+    public Bullet(int x, int y, int dx, int dy, String ownerId) {
         this.dx = dx;
         this.dy = dy;
-        this.isPlayerBullet = isPlayerBullet;
+        this.ownerId = ownerId;
 
         label = new JLabel();
         label.setBounds(x, y, 10, 10);
         label.setOpaque(true);
-        label.setBackground(isPlayerBullet ? Color.CYAN : Color.YELLOW);
+        label.setBackground(ownerId.equals("enemy") ? Color.YELLOW : Color.CYAN);
     }
 
     public void update() {
@@ -28,15 +26,8 @@ public class Bullet {
         return x < 0 || x > width || y < 0 || y > height;
     }
 
-    public JLabel getLabel() {
-        return label;
-    }
-
-    public Rectangle getBounds() {
-        return label.getBounds();
-    }
-
-    public boolean isPlayerBullet() {
-        return isPlayerBullet;
-    }
+    public JLabel getLabel() { return label; }
+    public Rectangle getBounds() { return label.getBounds(); }
+    public String getOwnerId() { return ownerId; }
+    public boolean isEnemyBullet() { return ownerId.equals("enemy"); }
 }
