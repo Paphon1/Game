@@ -1,10 +1,8 @@
-
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import javax.swing.*;
 
 class Player {
-
     private JLabel label;
     private int x, y;
     private final int MOVE_SPEED = 5;
@@ -12,21 +10,12 @@ class Player {
     private boolean wPressed, sPressed, aPressed, dPressed;
     private String playerId;
 
-    // ✅ เพิ่มภาพตามทิศทาง
-    private ImageIcon upIcon, downIcon, leftIcon, rightIcon;
-
     public Player(int startX, int startY, String playerId) {
         this.x = startX;
         this.y = startY;
         this.playerId = playerId;
 
-        // ✅ โหลดภาพ (คุณเปลี่ยน path ได้ตามที่เก็บไฟล์)
-        upIcon = new ImageIcon("../../assets/tank/tank_up.png");
-        downIcon = new ImageIcon("../../assets/tank/tank_down.png");
-        leftIcon = new ImageIcon("../../assets/tank/tank_left.png");
-        rightIcon = new ImageIcon("../../assets/tank/tank_right.png");
-
-        label = new JLabel(rightIcon); // เริ่มต้นหันขวา
+        label = new JLabel(playerId);
         label.setBounds(x, y, 80, 80);
         label.setOpaque(true);
         label.setBackground(Color.BLUE);
@@ -38,60 +27,33 @@ class Player {
 
     public void setKeyPressed(int keyCode, boolean pressed) {
         switch (keyCode) {
-            case KeyEvent.VK_W ->
-                wPressed = pressed;
-            case KeyEvent.VK_S ->
-                sPressed = pressed;
-            case KeyEvent.VK_A ->
-                aPressed = pressed;
-            case KeyEvent.VK_D ->
-                dPressed = pressed;
+            case KeyEvent.VK_W -> wPressed = pressed;
+            case KeyEvent.VK_S -> sPressed = pressed;
+            case KeyEvent.VK_A -> aPressed = pressed;
+            case KeyEvent.VK_D -> dPressed = pressed;
         }
         updateDirection();
     }
 
     private void updateDirection() {
         int dx = 0, dy = 0;
-        if (wPressed) {
-            dy -= 1;
-        }
-        if (sPressed) {
-            dy += 1;
-        }
-        if (aPressed) {
-            dx -= 1;
-        }
-        if (dPressed) {
-            dx += 1;
-        }
+        if (wPressed) dy -= 1;
+        if (sPressed) dy += 1;
+        if (aPressed) dx -= 1;
+        if (dPressed) dx += 1;
 
         if (dx != 0 || dy != 0) {
             double length = Math.sqrt(dx * dx + dy * dy);
             directionX = (int) Math.round(dx / length);
             directionY = (int) Math.round(dy / length);
-
-            // ✅ เปลี่ยนภาพ player ตามทิศ
-            if (Math.abs(dx) > Math.abs(dy)) {
-                label.setIcon(dx > 0 ? rightIcon : leftIcon);
-            } else {
-                label.setIcon(dy > 0 ? downIcon : upIcon);
-            }
         }
     }
 
     public void update(int maxWidth, int maxHeight) {
-        if (wPressed) {
-            y -= MOVE_SPEED;
-        }
-        if (sPressed) {
-            y += MOVE_SPEED;
-        }
-        if (aPressed) {
-            x -= MOVE_SPEED;
-        }
-        if (dPressed) {
-            x += MOVE_SPEED;
-        }
+        if (wPressed) y -= MOVE_SPEED;
+        if (sPressed) y += MOVE_SPEED;
+        if (aPressed) x -= MOVE_SPEED;
+        if (dPressed) x += MOVE_SPEED;
 
         x = Math.max(0, Math.min(x, maxWidth - label.getWidth()));
         y = Math.max(0, Math.min(y, maxHeight - label.getHeight()));
@@ -105,22 +67,12 @@ class Player {
         int dx = directionX * speed;
         int dy = directionY * speed;
 
-        if (dx == 0 && dy == 0) {
-            dx = speed;
-        }
+        if (dx == 0 && dy == 0) dx = speed;
 
         return new Bullet(centerX, centerY, dx, dy, playerId);
     }
 
-    public JLabel getLabel() {
-        return label;
-    }
-
-    public Rectangle getBounds() {
-        return label.getBounds();
-    }
-
-    public String getPlayerId() {
-        return playerId;
-    }
+    public JLabel getLabel() { return label; }
+    public Rectangle getBounds() { return label.getBounds(); }
+    public String getPlayerId() { return playerId; }
 }

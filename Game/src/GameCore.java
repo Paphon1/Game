@@ -1,4 +1,3 @@
-
 import java.awt.*;
 import java.awt.event.*;
 import java.util.*;
@@ -7,7 +6,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.swing.*;
 
 public class GameCore extends JFrame {
-
     private Player player;
     private Map<String, Player> otherPlayers = new ConcurrentHashMap<>();
     private Map<String, Enemy> enemies = new ConcurrentHashMap<>();
@@ -24,8 +22,6 @@ public class GameCore extends JFrame {
     private int enemyShootTimer = 0;
     private int enemyIdCounter = 0;
 
-    private Image backgroundImage; // ✅ เพิ่มรูปพื้นหลัง
-
     public GameCore(String playerId, String serverIp, boolean isHost) {
         this.playerId = playerId;
         this.isHost = isHost;
@@ -36,24 +32,12 @@ public class GameCore extends JFrame {
 
         setTitle("Bullet Hell Multiplayer - " + playerId + (isHost ? " [HOST]" : ""));
         setSize(800, 600);
+        setLayout(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+        getContentPane().setBackground(Color.GREEN);
 
-        // ✅ โหลดรูปพื้นหลัง (ใส่ path รูปของคุณเอง)
-        backgroundImage = new ImageIcon("../../assets/background/grass.jpg").getImage();
 
-        // ✅ ใช้ custom JPanel ที่วาดพื้นหลัง
-        JPanel backgroundPanel = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
-            }
-        };
-        backgroundPanel.setLayout(null);
-        setContentPane(backgroundPanel);
-
-        // ✅ player
         player = new Player(50 + random.nextInt(100), 250 + random.nextInt(100), playerId);
         add(player.getLabel());
 
@@ -100,9 +84,7 @@ public class GameCore extends JFrame {
             try {
                 switch (packet.type) {
                     case "MOVE":
-                        if (packet.playerId.equals(playerId)) {
-                            return;
-                        }
+                        if (packet.playerId.equals(playerId)) return;
 
                         otherPlayers.putIfAbsent(packet.playerId,
                                 new Player(packet.x, packet.y, packet.playerId));
@@ -115,9 +97,7 @@ public class GameCore extends JFrame {
                         break;
 
                     case "SHOOT":
-                        if (packet.playerId.equals(playerId)) {
-                            return;
-                        }
+                        if (packet.playerId.equals(playerId)) return;
 
                         Bullet b = new Bullet(packet.x, packet.y, 10, 0, packet.playerId);
                         bullets.add(b);
@@ -177,9 +157,7 @@ public class GameCore extends JFrame {
                 long timeTaken = System.currentTimeMillis() - start;
                 long sleep = FRAME_TIME - timeTaken;
                 if (sleep > 0) {
-                    try {
-                        Thread.sleep(sleep);
-                    } catch (InterruptedException e) {
+                    try { Thread.sleep(sleep); } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
                     }
