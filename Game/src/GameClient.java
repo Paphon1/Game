@@ -69,4 +69,13 @@ class GameClient {
             out.flush();
         } catch (IOException ignored) {}
     }
+
+    // 🔹 ฟังก์ชันใหม่สำหรับ enemy ยิง
+    public void sendEnemyShoot(int x, int y, int dx, int dy) {
+        try {
+            NetworkPacket packet = new NetworkPacket("ENEMY_SHOOT", "enemy", x, y, dx, dy);
+            out.writeObject(packet);
+            out.flush();
+        } catch (IOException ignored) {}
+    }
 }

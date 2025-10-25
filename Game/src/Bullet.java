@@ -4,7 +4,7 @@ import javax.swing.*;
 class Bullet {
     private JLabel label;
     private int dx, dy;
-    private String ownerId; // playerId ของคนยิง หรือ "enemy"
+    private String ownerId;
 
     public Bullet(int x, int y, int dx, int dy, String ownerId) {
         this.dx = dx;
@@ -30,4 +30,8 @@ class Bullet {
     public Rectangle getBounds() { return label.getBounds(); }
     public String getOwnerId() { return ownerId; }
     public boolean isEnemyBullet() { return ownerId.equals("enemy"); }
+
+    // 🔹 สำหรับส่งค่าความเร็วของกระสุนไป client
+    public int getDx() { return dx; }
+    public int getDy() { return dy; }
 }
