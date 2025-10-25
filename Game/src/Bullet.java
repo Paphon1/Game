@@ -3,31 +3,38 @@ import javax.swing.*;
 
 class Bullet {
     private JLabel label;
-    private int dx, dy;
-    private String ownerId; // playerId ของคนยิง หรือ "enemy"
+    private int x, y, dx, dy;
+    private String owner; // "player" หรือ "enemy"
 
-    public Bullet(int x, int y, int dx, int dy, String ownerId) {
+    public Bullet(int x, int y, int dx, int dy, String owner) {
+        this.x = x;
+        this.y = y;
         this.dx = dx;
         this.dy = dy;
-        this.ownerId = ownerId;
+        this.owner = owner;
 
         label = new JLabel();
-        label.setBounds(x, y, 10, 10);
         label.setOpaque(true);
-        label.setBackground(ownerId.equals("enemy") ? Color.YELLOW : Color.CYAN);
+        label.setBackground(owner.equals("enemy") ? Color.ORANGE : Color.CYAN);
+        label.setBounds(x, y, 8, 8);
     }
 
     public void update() {
-        label.setLocation(label.getX() + dx, label.getY() + dy);
+        x += dx;
+        y += dy;
+        label.setLocation(x, y);
     }
 
     public boolean isOutOfBounds(int width, int height) {
-        int x = label.getX(), y = label.getY();
-        return x < 0 || x > width || y < 0 || y > height;
+        return x < 0 || y < 0 || x > width || y > height;
+    }
+
+    public boolean isEnemyBullet() {
+        return owner.equals("enemy");
     }
 
     public JLabel getLabel() { return label; }
     public Rectangle getBounds() { return label.getBounds(); }
-    public String getOwnerId() { return ownerId; }
-    public boolean isEnemyBullet() { return ownerId.equals("enemy"); }
+    public int getDx() { return dx; }
+    public int getDy() { return dy; }
 }

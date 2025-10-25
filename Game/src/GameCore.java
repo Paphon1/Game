@@ -26,22 +26,18 @@ public class GameCore extends JFrame {
         this.playerId = playerId;
         this.isHost = isHost;
 
-        System.out.println("🎮 Starting GameCore...");
-        System.out.println("   Player ID: " + playerId);
-        System.out.println("   Is Host: " + isHost);
-
         setTitle("Bullet Hell Multiplayer - " + playerId + (isHost ? " [HOST]" : ""));
         setSize(800, 600);
         setLayout(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        player = new Player(50 + random.nextInt(100), 250 + random.nextInt(100), playerId);
+        player = new Player(100, 250, playerId);
         add(player.getLabel());
 
-        scoreLabel = new JLabel("Score: 0 | Players: 1");
+        scoreLabel = new JLabel("Score: 0 | Players: 1 | Enemies: 0");
         scoreLabel.setBounds(10, 10, 300, 30);
-        scoreLabel.setFont(new Font("Arial", Font.BOLD, 18));
+        scoreLabel.setFont(new Font("Arial", Font.BOLD, 16));
         add(scoreLabel);
 
         connectToServer(serverIp);
@@ -81,56 +77,48 @@ public class GameCore extends JFrame {
         SwingUtilities.invokeLater(() -> {
             try {
                 switch (packet.type) {
-                    case "MOVE":
+                    case "MOVE" -> {
                         if (packet.playerId.equals(playerId)) return;
-
                         otherPlayers.putIfAbsent(packet.playerId,
                                 new Player(packet.x, packet.y, packet.playerId));
                         Player p = otherPlayers.get(packet.playerId);
                         p.getLabel().setLocation(packet.x, packet.y);
-                        if (p.getLabel().getParent() == null) {
-                            add(p.getLabel());
-                        }
+                        if (p.getLabel().getParent() == null) add(p.getLabel());
                         updatePlayerCount();
-                        break;
+                    }
 
-                    case "SHOOT":
+                    case "SHOOT" -> {
                         if (packet.playerId.equals(playerId)) return;
-
                         Bullet b = new Bullet(packet.x, packet.y, 10, 0, packet.playerId);
                         bullets.add(b);
                         add(b.getLabel());
-                        break;
+                    }
 
-                    case "ENEMY_SPAWN":
+                    case "ENEMY_SPAWN" -> {
                         if (!enemies.containsKey(packet.enemyId)) {
-                            System.out.println("📦 Received ENEMY_SPAWN: " + packet.enemyId);
                             Enemy e = new Enemy(packet.x, packet.y, packet.hp, packet.enemyId);
                             enemies.put(packet.enemyId, e);
-                            add(e.getLabel());
-                            revalidate();
-                            repaint();
+                            add(e.getPanel());
                         }
-                        break;
+                        updatePlayerCount();
+                    }
 
-                    case "ENEMY_HIT":
+                    case "ENEMY_HIT" -> {
                         Enemy hitEnemy = enemies.get(packet.enemyId);
-                        if (hitEnemy != null && !hitEnemy.isDead()) {
-                            System.out.println("💥 ENEMY_HIT received: " + packet.enemyId + " HP: " + packet.hp);
-                            hitEnemy.setHp(packet.hp);
-                        }
-                        break;
+                        if (hitEnemy != null) hitEnemy.takeDamage(1);
+                    }
 
-                    case "ENEMY_DEAD":
-                        Enemy deadEnemy = enemies.get(packet.enemyId);
-                        if (deadEnemy != null) {
-                            System.out.println("☠️ ENEMY_DEAD received: " + packet.enemyId);
-                            remove(deadEnemy.getLabel());
-                            enemies.remove(packet.enemyId);
-                            revalidate();
-                            repaint();
-                        }
-                        break;
+                    case "ENEMY_DEAD" -> {
+                        Enemy deadEnemy = enemies.remove(packet.enemyId);
+                        if (deadEnemy != null) remove(deadEnemy.getPanel());
+                        updatePlayerCount();
+                    }
+
+                    case "ENEMY_SHOOT" -> {
+                        Bullet enemyBullet = new Bullet(packet.x, packet.y, packet.dx, packet.dy, "enemy");
+                        bullets.add(enemyBullet);
+                        add(enemyBullet.getLabel());
+                    }
                 }
             } catch (Exception e) {
                 System.err.println("❌ Error handling packet: " + e.getMessage());
@@ -152,13 +140,12 @@ public class GameCore extends JFrame {
             while (true) {
                 long start = System.currentTimeMillis();
                 updateGame();
-                long timeTaken = System.currentTimeMillis() - start;
-                long sleep = FRAME_TIME - timeTaken;
+                long elapsed = System.currentTimeMillis() - start;
+                long sleep = FRAME_TIME - elapsed;
                 if (sleep > 0) {
-                    try { Thread.sleep(sleep); } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+                    try {
+                        Thread.sleep(sleep);
+                    } catch (InterruptedException ignored) {}
                 }
             }
         }).start();
@@ -174,29 +161,30 @@ public class GameCore extends JFrame {
             client.sendMove(player.getLabel().getX(), player.getLabel().getY());
         }
 
-        List<Bullet> removeBullets = new ArrayList<>();
+        // อัปเดตกระสุนทั้งหมด
+        List<Bullet> removeList = new ArrayList<>();
         synchronized (bullets) {
-            for (Bullet b : new ArrayList<>(bullets)) {
+            for (Bullet b : bullets) {
                 b.update();
                 if (b.isOutOfBounds(width, height)) {
+                    removeList.add(b);
                     SwingUtilities.invokeLater(() -> remove(b.getLabel()));
-                    removeBullets.add(b);
                 }
             }
-            bullets.removeAll(removeBullets);
+            bullets.removeAll(removeList);
         }
 
-        // เฉพาะ host เท่านั้นที่ spawn enemies
+        // Host ควบคุม enemy
         if (isHost) {
             enemySpawnTimer++;
             enemyShootTimer++;
 
-            if (enemySpawnTimer >= 120) { // 2 วินาที
+            if (enemySpawnTimer >= 120) {
                 spawnEnemies();
                 enemySpawnTimer = 0;
             }
 
-            if (enemyShootTimer >= 90) { // 1.5 วินาที
+            if (enemyShootTimer >= 60) {
                 enemyShoot();
                 enemyShootTimer = 0;
             }
@@ -207,28 +195,17 @@ public class GameCore extends JFrame {
     }
 
     private void spawnEnemies() {
-        int count = 2 + random.nextInt(3);
-        System.out.println("🐛 Spawning " + count + " enemies...");
-
+        int count = 2 + random.nextInt(2);
         for (int i = 0; i < count; i++) {
-            int halfWidth = getWidth() / 2;
-            int x = halfWidth + random.nextInt(getWidth() - halfWidth - 100);
-            int y = 50 + random.nextInt(getHeight() - 150);
-            int hp = 1 + random.nextInt(3);
-
-            String enemyId = playerId + "_E" + (enemyIdCounter++);
+            int x = 400 + random.nextInt(300);
+            int y = 50 + random.nextInt(400);
+            int hp = 2;
+            String enemyId = "E" + (enemyIdCounter++);
             Enemy e = new Enemy(x, y, hp, enemyId);
             enemies.put(enemyId, e);
+            SwingUtilities.invokeLater(() -> add(e.getPanel()));
 
-            SwingUtilities.invokeLater(() -> {
-                add(e.getLabel());
-                revalidate();
-                repaint();
-            });
-
-            // ส่ง enemy ไปยัง clients อื่น
             if (client != null) {
-                System.out.println("📤 Sending ENEMY_SPAWN: " + enemyId);
                 client.sendEnemySpawn(enemyId, x, y, hp);
             }
         }
@@ -241,6 +218,12 @@ public class GameCore extends JFrame {
                 Bullet b = e.shootRandom();
                 bullets.add(b);
                 SwingUtilities.invokeLater(() -> add(b.getLabel()));
+
+                if (client != null) {
+                    client.sendEnemyShoot(e.getEnemyId(),
+                            b.getLabel().getX(), b.getLabel().getY(),
+                            b.getDx(), b.getDy());
+                }
             }
         }
     }
@@ -257,73 +240,46 @@ public class GameCore extends JFrame {
 
     private void checkCollisions() {
         Rectangle playerBounds = player.getBounds();
-        List<String> removeEnemyIds = new ArrayList<>();
         List<Bullet> removeBullets = new ArrayList<>();
+        List<String> deadEnemies = new ArrayList<>();
 
         synchronized (bullets) {
             for (Bullet b : new ArrayList<>(bullets)) {
                 Rectangle bulletBounds = b.getBounds();
 
                 if (!b.isEnemyBullet()) {
-                    // กระสุน player ชน enemy
+                    // ยิงศัตรู
                     for (Enemy e : enemies.values()) {
                         if (!e.isDead() && bulletBounds.intersects(e.getBounds())) {
                             e.takeDamage(1);
-                            SwingUtilities.invokeLater(() -> remove(b.getLabel()));
                             removeBullets.add(b);
-
-                            System.out.println("🎯 Hit enemy: " + e.getEnemyId() + " HP: " + e.getHp());
+                            remove(b.getLabel());
 
                             if (client != null) {
                                 client.sendEnemyHit(e.getEnemyId(), e.getHp());
                             }
 
                             if (e.isDead()) {
-                                removeEnemyIds.add(e.getEnemyId());
+                                deadEnemies.add(e.getEnemyId());
+                                remove(e.getPanel());
                                 score++;
-
-                                System.out.println("💀 Enemy died: " + e.getEnemyId());
-
-                                SwingUtilities.invokeLater(() -> {
-                                    remove(e.getLabel());
-                                    revalidate();
-                                    repaint();
-                                });
-
-                                if (client != null) {
-                                    client.sendEnemyDead(e.getEnemyId());
-                                }
+                                if (client != null) client.sendEnemyDead(e.getEnemyId());
                             }
                             break;
                         }
                     }
                 } else {
-                    // กระสุน enemy ชน player
+                    // กระสุนศัตรูชน player
                     if (bulletBounds.intersects(playerBounds)) {
                         gameOver();
                         return;
-                    }
-
-                    // กระสุน enemy ชน player อื่นๆ
-                    for (Player p : otherPlayers.values()) {
-                        if (bulletBounds.intersects(p.getBounds())) {
-                            SwingUtilities.invokeLater(() -> remove(b.getLabel()));
-                            removeBullets.add(b);
-                            break;
-                        }
                     }
                 }
             }
         }
 
-        for (String enemyId : removeEnemyIds) {
-            enemies.remove(enemyId);
-        }
-
-        synchronized (bullets) {
-            bullets.removeAll(removeBullets);
-        }
-
+        for (String id : deadEnemies) enemies.remove(id);
+        bullets.removeAll(removeBullets);
         updatePlayerCount();
     }
 
@@ -337,11 +293,7 @@ public class GameCore extends JFrame {
     public static void main(String[] args) {
         String playerId = (args.length > 0) ? args[0] : "Nam";
         String serverIp = (args.length > 1) ? args[1] : "26.7.76.52";
-
-        // ถ้า playerId ขึ้นต้นด้วย "Nam" จะเป็น Host อัตโนมัติ
         boolean isHost = playerId.startsWith("Nam");
-
-        System.out.println("🎮 Launching game for: " + playerId + (isHost ? " [AUTO-HOST]" : ""));
         SwingUtilities.invokeLater(() -> new GameCore(playerId, serverIp, isHost));
     }
 }
