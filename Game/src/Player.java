@@ -8,12 +8,12 @@ public class Player {
     private JLabel label;
     private int x, y;
     private final int MOVE_SPEED = 5;
+    private int directionX = 1, directionY = 0; // เริ่มหันไปขวา
     private boolean wPressed, sPressed, aPressed, dPressed;
 
     public Player(int startX, int startY) {
         this.x = startX;
         this.y = startY;
-
         label = new JLabel("Player");
         label.setBounds(x, y, 80, 80);
         label.setOpaque(true);
@@ -34,6 +34,29 @@ public class Player {
                 aPressed = pressed;
             case KeyEvent.VK_D ->
                 dPressed = pressed;
+        }
+        updateDirection();
+    }
+
+    private void updateDirection() {
+        int dx = 0, dy = 0;
+        if (wPressed) {
+            dy -= 1;
+        }
+        if (sPressed) {
+            dy += 1;
+        }
+        if (aPressed) {
+            dx -= 1;
+        }
+        if (dPressed) {
+            dx += 1;
+        }
+        // ป้องกัน dx=0,dy=0
+        if (dx != 0 || dy != 0) {
+            double length = Math.sqrt(dx * dx + dy * dy);
+            directionX = (int) Math.round(dx / length);
+            directionY = (int) Math.round(dy / length);
         }
     }
 
@@ -56,10 +79,20 @@ public class Player {
         label.setLocation(x, y);
     }
 
+    // ยิงตามทิศที่ Player กำลังหัน
     public Bullet shoot() {
         int centerX = x + label.getWidth() / 2;
         int centerY = y + label.getHeight() / 2;
-        return new Bullet(centerX, centerY, 10, 0, true); // ยิงไปขวา
+        int speed = 10;
+        int dx = directionX * speed;
+        int dy = directionY * speed;
+
+        // ถ้า player ไม่ขยับ → default ขวา
+        if (dx == 0 && dy == 0) {
+            dx = speed;
+        }
+
+        return new Bullet(centerX, centerY, dx, dy, true);
     }
 
     public JLabel getLabel() {
@@ -68,13 +101,5 @@ public class Player {
 
     public Rectangle getBounds() {
         return label.getBounds();
-    }
-
-    public boolean isVisible() {
-        return label.isVisible();
-    }
-
-    public void setVisible(boolean v) {
-        label.setVisible(v);
     }
 }

@@ -3,7 +3,7 @@ import java.awt.*;
 import java.util.Random;
 import javax.swing.*;
 
-public class Enemy {
+class Enemy {
 
     private JLabel label;
     private int x, y;
