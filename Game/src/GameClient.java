@@ -2,70 +2,71 @@ import java.io.*;
 import java.net.*;
 import java.util.function.Consumer;
 
-public class GameClient {
-    private Socket socket;
+class GameClient {
     private ObjectOutputStream out;
     private ObjectInputStream in;
-    private Consumer<NetworkPacket> packetHandler;
-    private boolean running = true;
+    private String playerId;
+    private Consumer<NetworkPacket> onPacketReceived;
 
-    public GameClient(String playerId, String ip, int port, Consumer<NetworkPacket> handler) throws IOException {
-        socket = new Socket(ip, port);
+    public GameClient(String playerId, String serverIp, int port, Consumer<NetworkPacket> handler) throws IOException {
+        this.playerId = playerId;
+        this.onPacketReceived = handler;
+
+        Socket socket = new Socket(serverIp, port);
+        System.out.println("✅ Connected to server.");
+
         out = new ObjectOutputStream(socket.getOutputStream());
         in = new ObjectInputStream(socket.getInputStream());
-        this.packetHandler = handler;
 
-        new Thread(() -> {
-            try {
-                while (running) {
-                    NetworkPacket packet = (NetworkPacket) in.readObject();
-                    handler.accept(packet);
-                }
-            } catch (Exception e) {
-                System.out.println("⚠️ Connection closed: " + e.getMessage());
-            }
-        }).start();
+        new Thread(this::listen).start();
     }
 
-    private synchronized void sendPacket(NetworkPacket packet) {
+    private void listen() {
         try {
-            out.writeObject(packet);
-            out.flush();
-        } catch (IOException e) {
-            System.err.println("❌ Failed to send packet: " + e.getMessage());
+            while (true) {
+                NetworkPacket packet = (NetworkPacket) in.readObject();
+                onPacketReceived.accept(packet);
+            }
+        } catch (Exception e) {
+            System.out.println("Disconnected from server.");
         }
     }
 
-    // ========= ส่งแพ็กเกจต่าง ๆ =========
     public void sendMove(int x, int y) {
-        sendPacket(new NetworkPacket("MOVE", "player", x, y));
+        try {
+            out.writeObject(new NetworkPacket("MOVE", playerId, x, y));
+            out.flush();
+        } catch (IOException ignored) {}
     }
 
     public void sendShoot(int x, int y) {
-        sendPacket(new NetworkPacket("SHOOT", "player", x, y));
+        try {
+            out.writeObject(new NetworkPacket("SHOOT", playerId, x, y));
+            out.flush();
+        } catch (IOException ignored) {}
     }
 
     public void sendEnemySpawn(String enemyId, int x, int y, int hp) {
-        sendPacket(new NetworkPacket("ENEMY_SPAWN", "host", enemyId, x, y, hp));
+        try {
+            NetworkPacket packet = new NetworkPacket("ENEMY_SPAWN", enemyId, x, y, hp);
+            out.writeObject(packet);
+            out.flush();
+        } catch (IOException ignored) {}
     }
 
     public void sendEnemyHit(String enemyId, int hp) {
-        sendPacket(new NetworkPacket("ENEMY_HIT", "host", enemyId, 0, 0, hp));
+        try {
+            NetworkPacket packet = new NetworkPacket("ENEMY_HIT", enemyId, 0, 0, hp);
+            out.writeObject(packet);
+            out.flush();
+        } catch (IOException ignored) {}
     }
 
     public void sendEnemyDead(String enemyId) {
-        sendPacket(new NetworkPacket("ENEMY_DEAD", "host", enemyId, 0, 0, 0));
-    }
-
-    // ✅ ส่งข้อมูลการยิงกระสุนของศัตรู
-    public void sendEnemyShoot(String enemyId, int x, int y, int dx, int dy) {
-        sendPacket(new NetworkPacket("ENEMY_SHOOT", "host", x, y, dx, dy, enemyId));
-    }
-
-    public void close() {
-        running = false;
         try {
-            socket.close();
+            NetworkPacket packet = new NetworkPacket("ENEMY_DEAD", enemyId, 0, 0, 0);
+            out.writeObject(packet);
+            out.flush();
         } catch (IOException ignored) {}
     }
 }
