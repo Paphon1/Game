@@ -26,7 +26,11 @@ public class GameCore extends JFrame {
         this.playerId = playerId;
         this.isHost = isHost;
 
-        setTitle("Bullet Hell Multiplayer - " + playerId);
+        System.out.println("🎮 Starting GameCore...");
+        System.out.println("   Player ID: " + playerId);
+        System.out.println("   Is Host: " + isHost);
+
+        setTitle("Bullet Hell Multiplayer - " + playerId + (isHost ? " [HOST]" : ""));
         setSize(800, 600);
         setLayout(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -169,6 +173,7 @@ public class GameCore extends JFrame {
             enemyShootTimer++;
 
             if (enemySpawnTimer >= 240) { // 4 วินาที
+                System.out.println("⏰ Enemy spawn timer reached! Spawning...");
                 spawnEnemies();
                 enemySpawnTimer = 0;
             }
@@ -200,7 +205,9 @@ public class GameCore extends JFrame {
             if (client != null) {
                 NetworkPacket packet = new NetworkPacket("ENEMY_SPAWN", enemyId, x, y, hp);
                 try {
-                    client.sendEnemySpawn(enemyId, x, y, hp);
+                    if (client != null) {
+                        client.sendEnemySpawn(enemyId, x, y, hp);
+                    }
                 } catch (Exception ignored) {}
             }
         }
@@ -301,8 +308,11 @@ public class GameCore extends JFrame {
     public static void main(String[] args) {
         String playerId = (args.length > 0) ? args[0] : "Nam" + new Random().nextInt(999);
         String serverIp = (args.length > 1) ? args[1] : "26.7.76.52";
-        boolean isHost = (args.length > 2) && args[2].equals("host");
 
+        // ถ้า playerId ขึ้นต้นด้วย "Nam" จะเป็น Host อัตโนมัติ
+        boolean isHost = playerId.startsWith("Nam");
+
+        System.out.println("🎮 Launching game for: " + playerId + (isHost ? " [AUTO-HOST]" : ""));
         SwingUtilities.invokeLater(() -> new GameCore(playerId, serverIp, isHost));
     }
 }
