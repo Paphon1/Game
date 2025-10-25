@@ -17,7 +17,7 @@ class Enemy {
         this.enemyId = enemyId;
 
         label = new JLabel();
-        label.setBounds(x, y, 80, 80);
+        label.setBounds(x, y, 50, 50);
         label.setOpaque(true);
         label.setBackground(Color.RED);
         label.setForeground(Color.WHITE);

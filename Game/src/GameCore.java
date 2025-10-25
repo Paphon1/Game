@@ -35,6 +35,8 @@ public class GameCore extends JFrame {
         setLayout(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+        getContentPane().setBackground(Color.GREEN);
+
 
         player = new Player(50 + random.nextInt(100), 250 + random.nextInt(100), playerId);
         add(player.getLabel());
