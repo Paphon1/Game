@@ -4,79 +4,58 @@ import java.util.*;
 
 public class GameServer {
     private static final int PORT = 5555;
-    private static final int FPS = 30;
+    private static final List<ObjectOutputStream> clients = new ArrayList<>();
 
-    private List<ClientHandler> clients = new ArrayList<>();
+    public static void main(String[] args) {
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            System.out.println("🎮 Server started on port " + PORT);
 
-    public static void main(String[] args) throws IOException {
-        new GameServer().start();
-    }
-
-    public void start() throws IOException {
-        ServerSocket serverSocket = new ServerSocket(PORT);
-        System.out.println("Server started on port " + PORT);
-
-        new Thread(() -> {
             while (true) {
-                try {
-                    Socket socket = serverSocket.accept();
-                    System.out.println("Client connected: " + socket.getInetAddress());
-                    ClientHandler handler = new ClientHandler(socket);
-                    synchronized (clients) {
-                        clients.add(handler);
-                    }
-                    new Thread(handler).start();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }).start();
+                Socket socket = serverSocket.accept();
+                System.out.println("Client joined: " + socket.getInetAddress());
 
-        // Game loop (จำลองข้อมูลเกมกลาง)
-        while (true) {
-            broadcast("SERVER_TICK " + System.currentTimeMillis());
-            try {
-                Thread.sleep(1000 / FPS);
-            } catch (InterruptedException ignored) {}
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                clients.add(out);
+
+                new Thread(new ClientHandler(socket, out)).start();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
-    private void broadcast(String message) {
+    static void broadcast(NetworkPacket packet) {
         synchronized (clients) {
-            for (ClientHandler c : clients) {
-                c.send(message);
+            for (ObjectOutputStream out : clients) {
+                try {
+                    out.writeObject(packet);
+                    out.flush();
+                } catch (IOException ignored) {}
             }
         }
     }
 
-    private class ClientHandler implements Runnable {
+    static class ClientHandler implements Runnable {
         private Socket socket;
-        private PrintWriter out;
-        private BufferedReader in;
+        private ObjectOutputStream out;
+        private ObjectInputStream in;
 
-        ClientHandler(Socket socket) throws IOException {
+        ClientHandler(Socket socket, ObjectOutputStream out) throws IOException {
             this.socket = socket;
-            out = new PrintWriter(socket.getOutputStream(), true);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            this.out = out;
+            this.in = new ObjectInputStream(socket.getInputStream());
         }
 
+        @Override
         public void run() {
             try {
-                String input;
-                while ((input = in.readLine()) != null) {
-                    System.out.println("Received: " + input);
-                    // ส่งต่อให้ client อื่น
-                    broadcast("PLAYER_MOVE " + input);
+                while (true) {
+                    NetworkPacket packet = (NetworkPacket) in.readObject();
+                    broadcast(packet);
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 System.out.println("Client disconnected");
-            } finally {
-                try { socket.close(); } catch (IOException ignored) {}
             }
-        }
-
-        public void send(String msg) {
-            out.println(msg);
         }
     }
 }
