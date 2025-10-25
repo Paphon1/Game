@@ -1,17 +1,21 @@
-
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.Timer;
 
 public class GameCore extends JFrame {
 
     private Player player;
     private Map<String, Player> otherPlayers = new ConcurrentHashMap<>();
     private Map<String, Enemy> enemies = new ConcurrentHashMap<>();
-    private List<Bullet> bullets = Collections.synchronizedList(new ArrayList<>());
+    private List<Bullet> bullets = new CopyOnWriteArrayList<>();
     private Random random = new Random();
     private JLabel scoreLabel;
     private int score = 0;
@@ -24,7 +28,7 @@ public class GameCore extends JFrame {
     private int enemyShootTimer = 0;
     private int enemyIdCounter = 0;
 
-    private Image backgroundImage; // ✅ เพิ่มรูปพื้นหลัง
+    private BufferedImage backgroundImage;
 
     public GameCore(String playerId, String serverIp, boolean isHost) {
         this.playerId = playerId;
@@ -39,23 +43,28 @@ public class GameCore extends JFrame {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-       //  ✅ โหลดรูปพื้นหลัง (ใส่ path รูปของคุณเอง)
-        ImageIcon backgroundImage = new ImageIcon(getClass().getResource("/assets/background/grass.jpg"));
+        // โหลดพื้นหลัง
+        try {
+            backgroundImage = ImageIO.read(getClass().getResource("/assets/background/grass.jpg"));
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("❌ Failed to load background image!");
+        }
 
-
-        // ✅ ใช้ custom JPanel ที่วาดพื้นหลัง
+        // custom JPanel สำหรับวาดพื้นหลัง
         JPanel backgroundPanel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                g.drawImage(backgroundImage.getImage(), 0, 0, getWidth(), getHeight(), this);
-
+                if (backgroundImage != null) {
+                    g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), null);
+                }
             }
         };
         backgroundPanel.setLayout(null);
         setContentPane(backgroundPanel);
 
-        // ✅ player
+        // player
         player = new Player(50 + random.nextInt(100), 250 + random.nextInt(100), playerId);
         add(player.getLabel());
 
@@ -102,24 +111,18 @@ public class GameCore extends JFrame {
             try {
                 switch (packet.type) {
                     case "MOVE":
-                        if (packet.playerId.equals(playerId)) {
-                            return;
-                        }
+                        if (packet.playerId.equals(playerId)) return;
 
                         otherPlayers.putIfAbsent(packet.playerId,
                                 new Player(packet.x, packet.y, packet.playerId));
                         Player p = otherPlayers.get(packet.playerId);
                         p.getLabel().setLocation(packet.x, packet.y);
-                        if (p.getLabel().getParent() == null) {
-                            add(p.getLabel());
-                        }
+                        if (p.getLabel().getParent() == null) add(p.getLabel());
                         updatePlayerCount();
                         break;
 
                     case "SHOOT":
-                        if (packet.playerId.equals(playerId)) {
-                            return;
-                        }
+                        if (packet.playerId.equals(playerId)) return;
 
                         Bullet b = new Bullet(packet.x, packet.y, 10, 0, packet.playerId);
                         bullets.add(b);
@@ -128,7 +131,6 @@ public class GameCore extends JFrame {
 
                     case "ENEMY_SPAWN":
                         if (!enemies.containsKey(packet.enemyId)) {
-                            System.out.println("📦 Received ENEMY_SPAWN: " + packet.enemyId);
                             Enemy e = new Enemy(packet.x, packet.y, packet.hp, packet.enemyId);
                             enemies.put(packet.enemyId, e);
                             add(e.getLabel());
@@ -140,7 +142,6 @@ public class GameCore extends JFrame {
                     case "ENEMY_HIT":
                         Enemy hitEnemy = enemies.get(packet.enemyId);
                         if (hitEnemy != null && !hitEnemy.isDead()) {
-                            System.out.println("💥 ENEMY_HIT received: " + packet.enemyId + " HP: " + packet.hp);
                             hitEnemy.setHp(packet.hp);
                         }
                         break;
@@ -148,7 +149,6 @@ public class GameCore extends JFrame {
                     case "ENEMY_DEAD":
                         Enemy deadEnemy = enemies.get(packet.enemyId);
                         if (deadEnemy != null) {
-                            System.out.println("☠️ ENEMY_DEAD received: " + packet.enemyId);
                             remove(deadEnemy.getLabel());
                             enemies.remove(packet.enemyId);
                             revalidate();
@@ -157,7 +157,6 @@ public class GameCore extends JFrame {
                         break;
                 }
             } catch (Exception e) {
-                System.err.println("❌ Error handling packet: " + e.getMessage());
                 e.printStackTrace();
             }
         });
@@ -169,25 +168,9 @@ public class GameCore extends JFrame {
     }
 
     private void startGameLoop() {
-        final int FPS = 60;
-        final int FRAME_TIME = 1000 / FPS;
-
-        new Thread(() -> {
-            while (true) {
-                long start = System.currentTimeMillis();
-                updateGame();
-                long timeTaken = System.currentTimeMillis() - start;
-                long sleep = FRAME_TIME - timeTaken;
-                if (sleep > 0) {
-                    try {
-                        Thread.sleep(sleep);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
-        }).start();
+        int FPS = 60;
+        Timer timer = new Timer(1000 / FPS, e -> updateGame());
+        timer.start();
     }
 
     private void updateGame() {
@@ -196,46 +179,48 @@ public class GameCore extends JFrame {
 
         player.update(width, height);
 
-        if (client != null) {
-            client.sendMove(player.getLabel().getX(), player.getLabel().getY());
-        }
+        if (client != null) client.sendMove(player.getLabel().getX(), player.getLabel().getY());
 
-        List<Bullet> removeBullets = new ArrayList<>();
-        synchronized (bullets) {
-            for (Bullet b : new ArrayList<>(bullets)) {
-                b.update();
-                if (b.isOutOfBounds(width, height)) {
-                    SwingUtilities.invokeLater(() -> remove(b.getLabel()));
-                    removeBullets.add(b);
-                }
+        // update bullets
+        List<JLabel> toRemove = new ArrayList<>();
+        for (Bullet b : bullets) {
+            b.update();
+            if (b.isOutOfBounds(width, height)) {
+                toRemove.add(b.getLabel());
+                bullets.remove(b);
             }
-            bullets.removeAll(removeBullets);
         }
 
-        // เฉพาะ host เท่านั้นที่ spawn enemies
+        // add/remove enemies/bullets -> repaint 1 ครั้งต่อ frame
+        if (!toRemove.isEmpty()) {
+            SwingUtilities.invokeLater(() -> {
+                for (JLabel l : toRemove) remove(l);
+                revalidate();
+                repaint();
+            });
+        }
+
+        // host spawn & shoot
         if (isHost) {
             enemySpawnTimer++;
             enemyShootTimer++;
 
-            if (enemySpawnTimer >= 120) { // 2 วินาที
+            if (enemySpawnTimer >= 120) { // 2 sec
                 spawnEnemies();
                 enemySpawnTimer = 0;
             }
 
-            if (enemyShootTimer >= 90) { // 1.5 วินาที
+            if (enemyShootTimer >= 90) { // 1.5 sec
                 enemyShoot();
                 enemyShootTimer = 0;
             }
         }
 
         checkCollisions();
-        SwingUtilities.invokeLater(this::repaint);
     }
 
     private void spawnEnemies() {
         int count = 2 + random.nextInt(3);
-        System.out.println("🐛 Spawning " + count + " enemies...");
-
         for (int i = 0; i < count; i++) {
             int halfWidth = getWidth() / 2;
             int x = halfWidth + random.nextInt(getWidth() - halfWidth - 100);
@@ -252,11 +237,7 @@ public class GameCore extends JFrame {
                 repaint();
             });
 
-            // ส่ง enemy ไปยัง clients อื่น
-            if (client != null) {
-                System.out.println("📤 Sending ENEMY_SPAWN: " + enemyId);
-                client.sendEnemySpawn(enemyId, x, y, hp);
-            }
+            if (client != null) client.sendEnemySpawn(enemyId, x, y, hp);
         }
         updatePlayerCount();
     }
@@ -276,27 +257,26 @@ public class GameCore extends JFrame {
         bullets.add(b);
         SwingUtilities.invokeLater(() -> add(b.getLabel()));
 
-        if (client != null) {
-            client.sendShoot(b.getLabel().getX(), b.getLabel().getY());
-        }
+        if (client != null) client.sendShoot(b.getLabel().getX(), b.getLabel().getY());
     }
 
     private void checkCollisions() {
         Rectangle playerBounds = player.getBounds();
         List<String> removeEnemyIds = new ArrayList<>();
-        List<Bullet> removeBullets = new ArrayList<>();
 
         synchronized (bullets) {
+            List<Bullet> bulletsToRemove = new ArrayList<>();
+
             for (Bullet b : new ArrayList<>(bullets)) {
                 Rectangle bulletBounds = b.getBounds();
 
                 if (!b.isEnemyBullet()) {
                     // กระสุน player ชน enemy
+                    boolean hit = false;
                     for (Enemy e : enemies.values()) {
                         if (!e.isDead() && bulletBounds.intersects(e.getBounds())) {
                             e.takeDamage(1);
-                            SwingUtilities.invokeLater(() -> remove(b.getLabel()));
-                            removeBullets.add(b);
+                            hit = true;
 
                             System.out.println("🎯 Hit enemy: " + e.getEnemyId() + " HP: " + e.getHp());
 
@@ -320,8 +300,12 @@ public class GameCore extends JFrame {
                                     client.sendEnemyDead(e.getEnemyId());
                                 }
                             }
-                            break;
+                            break; // bullet ชนศัตรูตัวเดียวก็พอ
                         }
+                    }
+                    if (hit) {
+                        bulletsToRemove.add(b);
+                        SwingUtilities.invokeLater(() -> remove(b.getLabel()));
                     }
                 } else {
                     // กระสุน enemy ชน player
@@ -333,21 +317,20 @@ public class GameCore extends JFrame {
                     // กระสุน enemy ชน player อื่นๆ
                     for (Player p : otherPlayers.values()) {
                         if (bulletBounds.intersects(p.getBounds())) {
+                            bulletsToRemove.add(b);
                             SwingUtilities.invokeLater(() -> remove(b.getLabel()));
-                            removeBullets.add(b);
                             break;
                         }
                     }
                 }
             }
+
+            bullets.removeAll(bulletsToRemove);
         }
 
+        // ลบ enemy ที่ตายแล้ว
         for (String enemyId : removeEnemyIds) {
             enemies.remove(enemyId);
-        }
-
-        synchronized (bullets) {
-            bullets.removeAll(removeBullets);
         }
 
         updatePlayerCount();
@@ -363,11 +346,8 @@ public class GameCore extends JFrame {
     public static void main(String[] args) {
         String playerId = (args.length > 0) ? args[0] : "Nam";
         String serverIp = (args.length > 1) ? args[1] : "26.7.76.52";
-
-        // ถ้า playerId ขึ้นต้นด้วย "Nam" จะเป็น Host อัตโนมัติ
         boolean isHost = playerId.startsWith("Nam");
 
-        System.out.println("🎮 Launching game for: " + playerId + (isHost ? " [AUTO-HOST]" : ""));
         SwingUtilities.invokeLater(() -> new GameCore(playerId, serverIp, isHost));
     }
 }
