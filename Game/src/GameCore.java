@@ -39,17 +39,15 @@ public class GameCore extends JFrame {
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-       //  ✅ โหลดรูปพื้นหลัง (ใส่ path รูปของคุณเอง)
-        ImageIcon backgroundImage = new ImageIcon(getClass().getResource("/assets/background/grass.jpg"));
-
+        // ✅ โหลดรูปพื้นหลัง (ใส่ path รูปของคุณเอง)
+        backgroundImage = new ImageIcon("../../assets/background/grass.jpg").getImage();
 
         // ✅ ใช้ custom JPanel ที่วาดพื้นหลัง
         JPanel backgroundPanel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                g.drawImage(backgroundImage.getImage(), 0, 0, getWidth(), getHeight(), this);
-
+                g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
             }
         };
         backgroundPanel.setLayout(null);
